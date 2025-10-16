@@ -1,4 +1,4 @@
-# app.R — SDG 7 Explorer (with "All Years" option)
+# app.R — SDG 7 Explorer (with "All Years" option + Year selectable + fixed boxplot)
 
 # ---- Libraries ----
 library(shiny)
@@ -14,17 +14,35 @@ library(shinythemes)
 data_path <- "sdg7_data_latest.csv"
 sdg7 <- read_csv(data_path, show_col_types = FALSE)
 
+# ---- Normalize column names ----
+name_fix <- function(df) {
+  nms <- names(df)
+  repl <- c(
+    "year" = "Year",
+    "country" = "Country",
+    "iso3" = "ISO3",
+    "iso2" = "ISO2",
+    "region" = "Region",
+    "incomegroup" = "IncomeGroup"
+  )
+  idx <- tolower(nms) %in% names(repl)
+  names(df)[idx] <- unname(repl[tolower(nms[idx])])
+  df
+}
+sdg7 <- name_fix(sdg7)
+
 # ---- Indicator Labels ----
 indicator_labels <- c(
-  "EG.ELC.ACCS.ZS"    = "Access to electricity (% of population)",
-  "EG.CFT.ACCS.ZS"    = "Access to clean fuels for cooking (% of population)",
-  "EG.FEC.RNEW.ZS"    = "Renewable energy share (% total final energy consumption)",
-  "EG.ELC.RNWX.ZS"    = "Electricity production from renewables (% total)",
-  "EG.EGY.PRIM.PP.KD" = "Energy intensity (MJ per USD of GDP, PPP 2017)",
-  "EG.USE.PCAP.KG.OE" = "Energy use per capita (kg of oil equivalent)",
-  "EG.USE.ELEC.KH.PC" = "Electric power consumption (kWh per capita)",
-  "EN.ATM.CO2E.PC"    = "CO₂ emissions (metric tons per capita)",
-  "EN.CO2.ETOT.ZS"    = "CO₂ from electricity and heat production (% of total)"
+  "Year"               = "Year",
+  "EG.ELC.ACCS.ZS"     = "Access to electricity (% of population)",
+  "EG.CFT.ACCS.ZS"     = "Access to clean fuels for cooking (% of population)",
+  "EG.FEC.RNEW.ZS"     = "Renewable energy share (% total final energy consumption)",
+  "EG.ELC.RNWX.ZS"     = "Electricity production from renewables (% total)",
+  "EG.EGY.PRIM.PP.KD"  = "Energy intensity (MJ per USD of GDP, PPP 2017)",
+  "EG.USE.PCAP.KG.OE"  = "Energy use per capita (kg oil equivalent)",
+  "EG.USE.ELEC.KH.PC"  = "Electric power consumption (kWh per capita)",
+  "EN.ATM.CO2E.PC"     = "CO₂ emissions (metric tons per capita)",
+  "EN.CO2.ETOT.ZS"     = "CO₂ from electricity and heat production (% of total)"
 )
 indicator_codes <- names(indicator_labels)
 
@@ -119,7 +137,7 @@ ui <- fluidPage(
 # ---- SERVER ----
 server <- function(input, output, session) {
   
-  # Reactive filtered data (with All Years option)
+  # Reactive filtered data
   filtered_data <- reactive({
     df <- sdg7
     if (input$year != "All Years") df <- df %>% filter(Year == input$year)
@@ -129,19 +147,24 @@ server <- function(input, output, session) {
     df
   })
   
-  # Boxplot
+  # ---- Boxplot ----
   output$boxplot <- renderPlotly({
     req(input$box_ind)
     dat <- filtered_data() %>% select(Country, Year, value = all_of(input$box_ind)) %>% drop_na()
-    p <- ggplot(dat, aes(y = value, x = factor(Year), text = Country)) +
-      geom_boxplot(fill = "#0072B2") +
-      labs(
-        title = paste0(indicator_labels[input$box_ind],
-                       if (input$year == "All Years") " (All Years)" else paste0(" (", input$year, ")")),
-        x = if (input$year == "All Years") "Year" else NULL,
-        y = "Value"
-      ) +
+    
+    p <- if (input$year == "All Years") {
+      ggplot(dat, aes(x = factor(Year), y = value, text = Country)) +
+        geom_boxplot(fill = "#0072B2") +
+        labs(title = paste0(indicator_labels[input$box_ind], " (All Years)"),
+             x = "Year", y = "Value")
+    } else {
+      ggplot(dat, aes(y = value, text = Country)) +
+        geom_boxplot(fill = "#0072B2") +
+        labs(title = paste0(indicator_labels[input$box_ind], " (", input$year, ")"),
+             x = NULL, y = "Value")
+    } +
       theme_minimal(base_size = 14)
+    
     ggplotly(p, tooltip = "text")
   })
   output$tbl_box <- renderDT({
@@ -149,31 +172,27 @@ server <- function(input, output, session) {
     datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
   })
   
-  # Scatter
+  # ---- Scatter ----
   output$scatter <- renderPlotly({
     req(input$sc_x, input$sc_y)
-    dat <- filtered_data() %>%
-      select(Country, Year, x = all_of(input$sc_x), y = all_of(input$sc_y)) %>% drop_na()
+    dat <- filtered_data() %>% select(Country, Year, x = all_of(input$sc_x), y = all_of(input$sc_y)) %>% drop_na()
+    dat$x <- as.numeric(dat$x)
+    dat$y <- as.numeric(dat$y)
     p <- ggplot(dat, aes(x = x, y = y, color = Year, text = Country)) +
       geom_point(size = 2) +
-      labs(
-        x = indicator_labels[input$sc_x],
-        y = indicator_labels[input$sc_y],
-        title = paste0(indicator_labels[input$sc_x], " vs ", indicator_labels[input$sc_y],
-                       if (input$year == "All Years") " (All Years)" else paste0(" (", input$year, ")"))
-      ) +
+      labs(x = indicator_labels[input$sc_x],
+           y = indicator_labels[input$sc_y],
+           title = paste0(indicator_labels[input$sc_x], " vs ", indicator_labels[input$sc_y],
+                          if (input$year == "All Years") " (All Years)" else paste0(" (", input$year, ")"))) +
       theme_minimal(base_size = 14)
     ggplotly(p, tooltip = "text")
   })
-  output$tbl_scatter <- renderDT({
-    dat <- filtered_data() %>% select(Country, Year, all_of(input$sc_x), all_of(input$sc_y)) %>% drop_na()
-    datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
-  })
   
-  # Regression
+  # ---- Regression ----
   output$regplot <- renderPlotly({
     req(input$reg_x, input$reg_y)
     dat <- filtered_data() %>% select(Country, x = all_of(input$reg_x), y = all_of(input$reg_y)) %>% drop_na()
+    dat$x <- as.numeric(dat$x); dat$y <- as.numeric(dat$y)
     if (nrow(dat) < 3) return(NULL)
     model <- lm(y ~ x, dat)
     eq <- paste0("y = ", round(coef(model)[2], 2), "x + ", round(coef(model)[1], 2),
@@ -181,43 +200,25 @@ server <- function(input, output, session) {
     p <- ggplot(dat, aes(x = x, y = y, text = Country)) +
       geom_point(color = "#1b9e77") +
       geom_smooth(method = "lm", se = TRUE, color = "#d95f02") +
-      labs(
-        x = indicator_labels[input$reg_x],
-        y = indicator_labels[input$reg_y],
-        title = eq
-      ) +
+      labs(x = indicator_labels[input$reg_x], y = indicator_labels[input$reg_y], title = eq) +
       theme_minimal(base_size = 14)
     ggplotly(p, tooltip = "text")
   })
-  output$reg_summary <- renderPrint({
-    dat <- filtered_data() %>% select(x = all_of(input$reg_x), y = all_of(input$reg_y)) %>% drop_na()
-    summary(lm(y ~ x, dat))
-  })
-  output$tbl_reg <- renderDT({
-    dat <- filtered_data() %>% select(Country, Year, all_of(input$reg_x), all_of(input$reg_y)) %>% drop_na()
-    datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
-  })
   
-  # Histogram
+  # ---- Histogram ----
   output$hist <- renderPlotly({
     req(input$hist_ind)
     dat <- filtered_data() %>% select(value = all_of(input$hist_ind)) %>% drop_na()
     p <- ggplot(dat, aes(x = value)) +
       geom_histogram(bins = input$bins, fill = "#4daf4a", color = "white") +
-      labs(
-        x = indicator_labels[input$hist_ind], y = "Count",
-        title = paste0(indicator_labels[input$hist_ind],
-                       if (input$year == "All Years") " (All Years)" else paste0(" (", input$year, ")"))
-      ) +
+      labs(x = indicator_labels[input$hist_ind], y = "Count",
+           title = paste0(indicator_labels[input$hist_ind],
+                          if (input$year == "All Years") " (All Years)" else paste0(" (", input$year, ")"))) +
       theme_minimal(base_size = 14)
     ggplotly(p)
   })
-  output$tbl_hist <- renderDT({
-    dat <- filtered_data() %>% select(Country, Year, all_of(input$hist_ind)) %>% drop_na()
-    datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
-  })
   
-  # Correlation
+  # ---- Correlation ----
   output$corrplot <- renderPlotly({
     dat <- filtered_data() %>% select(all_of(indicator_codes)) %>% drop_na()
     if (nrow(dat) < 3) return(NULL)
@@ -225,14 +226,11 @@ server <- function(input, output, session) {
     cm_long <- melt(cm)
     plot_ly(cm_long, x = ~Var1, y = ~Var2, z = ~value, type = "heatmap",
             colorscale = "RdBu", reversescale = TRUE) %>%
-      layout(title = paste("Correlation Matrix", if (input$year == "All Years") "(All Years)" else paste0("(", input$year, ")")))
-  })
-  output$tbl_corr <- renderDT({
-    dat <- filtered_data() %>% select(Country, Year, all_of(indicator_codes))
-    datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
+      layout(title = paste("Correlation Matrix",
+                           if (input$year == "All Years") "(All Years)" else paste0("(", input$year, ")")))
   })
   
-  # Summary
+  # ---- Summary ----
   output$summary <- renderDT({
     dat <- filtered_data() %>% select(val = all_of(input$sum_ind)) %>% drop_na()
     stats <- tibble(
@@ -245,19 +243,17 @@ server <- function(input, output, session) {
     )
     datatable(stats, options = list(dom = "t"))
   })
-  output$tbl_sum <- renderDT({
-    dat <- filtered_data() %>% select(Country, Year, all_of(input$sum_ind)) %>% drop_na()
-    datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
-  })
   
-  # Raw Data
+  # ---- Raw Data ----
   output$raw_table <- renderDT({
     datatable(filtered_data(), extensions = "Buttons",
               options = list(pageLength = 10, scrollX = TRUE,
                              dom = "Bfrtip", buttons = c("copy", "csv", "excel")))
   })
+  
   output$download_filtered <- downloadHandler(
-    filename = function() paste0("sdg7_filtered_", if (input$year == "All Years") "all_years" else input$year, ".csv"),
+    filename = function() paste0("sdg7_filtered_",
+                                 if (input$year == "All Years") "all_years" else input$year, ".csv"),
     content = function(file) write_csv(filtered_data(), file)
   )
 }
