@@ -1,4 +1,4 @@
-# app.R — SDG 7 Explorer (with "All Years" option + Year selectable + fixed boxplot)
+# app.R — SDG 7 Explorer (added Trend Over Time tab)
 
 # ---- Libraries ----
 library(shiny)
@@ -83,6 +83,9 @@ ui <- fluidPage(
                        selectInput("hist_ind", "Indicator", choices = setNames(indicator_codes, indicator_labels)),
                        sliderInput("bins", "Bins", 5, 60, 25, 1),
                        checkboxInput("show_hist_tbl", "Show data table", FALSE)),
+      conditionalPanel("input.tab_selected == 'Trend'",
+                       selectInput("trend_ind", "Indicator", choices = setNames(indicator_codes[-1], indicator_labels[-1])),
+                       checkboxInput("show_trend_tbl", "Show data table", FALSE)),
       conditionalPanel("input.tab_selected == 'Correlation'",
                        checkboxInput("show_corr_tbl", "Show data table", FALSE)),
       conditionalPanel("input.tab_selected == 'Summary'",
@@ -114,6 +117,11 @@ ui <- fluidPage(
                            h4("📊 Histogram"),
                            plotlyOutput("hist", height = "420px"),
                            conditionalPanel("input.show_hist_tbl", DTOutput("tbl_hist"))
+                  ),
+                  tabPanel("Trend",
+                           h4("📆 Trend Over Time"),
+                           plotlyOutput("trendplot", height = "420px"),
+                           conditionalPanel("input.show_trend_tbl", DTOutput("tbl_trend"))
                   ),
                   tabPanel("Correlation",
                            h4("🔗 Correlation Matrix"),
@@ -147,6 +155,29 @@ server <- function(input, output, session) {
     df
   })
   
+  # ---- Trend Over Time ----
+  output$trendplot <- renderPlotly({
+    req(input$trend_ind)
+    dat <- sdg7
+    if (length(input$countries)) dat <- dat %>% filter(Country %in% input$countries)
+    dat <- dat %>% select(Country, Year, value = all_of(input$trend_ind)) %>% drop_na()
+    p <- ggplot(dat, aes(x = Year, y = value, color = Country)) +
+      geom_line(size = 1.1) +
+      geom_point(size = 1.8) +
+      labs(
+        title = paste0(indicator_labels[input$trend_ind], " over Time"),
+        x = "Year", y = indicator_labels[input$trend_ind]
+      ) +
+      theme_minimal(base_size = 14)
+    ggplotly(p)
+  })
+  output$tbl_trend <- renderDT({
+    dat <- sdg7
+    if (length(input$countries)) dat <- dat %>% filter(Country %in% input$countries)
+    dat <- dat %>% select(Country, Year, all_of(input$trend_ind)) %>% drop_na()
+    datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
+  })
+  
   # ---- Boxplot ----
   output$boxplot <- renderPlotly({
     req(input$box_ind)
@@ -164,12 +195,7 @@ server <- function(input, output, session) {
              x = NULL, y = "Value")
     } +
       theme_minimal(base_size = 14)
-    
     ggplotly(p, tooltip = "text")
-  })
-  output$tbl_box <- renderDT({
-    dat <- filtered_data() %>% select(Country, Year, all_of(input$box_ind)) %>% drop_na()
-    datatable(dat, options = list(pageLength = 10, scrollX = TRUE))
   })
   
   # ---- Scatter ----
@@ -182,8 +208,7 @@ server <- function(input, output, session) {
       geom_point(size = 2) +
       labs(x = indicator_labels[input$sc_x],
            y = indicator_labels[input$sc_y],
-           title = paste0(indicator_labels[input$sc_x], " vs ", indicator_labels[input$sc_y],
-                          if (input$year == "All Years") " (All Years)" else paste0(" (", input$year, ")"))) +
+           title = paste0(indicator_labels[input$sc_x], " vs ", indicator_labels[input$sc_y])) +
       theme_minimal(base_size = 14)
     ggplotly(p, tooltip = "text")
   })
@@ -192,7 +217,8 @@ server <- function(input, output, session) {
   output$regplot <- renderPlotly({
     req(input$reg_x, input$reg_y)
     dat <- filtered_data() %>% select(Country, x = all_of(input$reg_x), y = all_of(input$reg_y)) %>% drop_na()
-    dat$x <- as.numeric(dat$x); dat$y <- as.numeric(dat$y)
+    dat$x <- as.numeric(dat$x)
+    dat$y <- as.numeric(dat$y)
     if (nrow(dat) < 3) return(NULL)
     model <- lm(y ~ x, dat)
     eq <- paste0("y = ", round(coef(model)[2], 2), "x + ", round(coef(model)[1], 2),
@@ -212,8 +238,7 @@ server <- function(input, output, session) {
     p <- ggplot(dat, aes(x = value)) +
       geom_histogram(bins = input$bins, fill = "#4daf4a", color = "white") +
       labs(x = indicator_labels[input$hist_ind], y = "Count",
-           title = paste0(indicator_labels[input$hist_ind],
-                          if (input$year == "All Years") " (All Years)" else paste0(" (", input$year, ")"))) +
+           title = indicator_labels[input$hist_ind]) +
       theme_minimal(base_size = 14)
     ggplotly(p)
   })
@@ -226,8 +251,7 @@ server <- function(input, output, session) {
     cm_long <- melt(cm)
     plot_ly(cm_long, x = ~Var1, y = ~Var2, z = ~value, type = "heatmap",
             colorscale = "RdBu", reversescale = TRUE) %>%
-      layout(title = paste("Correlation Matrix",
-                           if (input$year == "All Years") "(All Years)" else paste0("(", input$year, ")")))
+      layout(title = "Correlation Matrix")
   })
   
   # ---- Summary ----
@@ -260,3 +284,4 @@ server <- function(input, output, session) {
 
 # ---- Run App ----
 shinyApp(ui, server)
+
