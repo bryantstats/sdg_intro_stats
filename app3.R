@@ -6,6 +6,7 @@ library(ggplot2)
 library(plotly)
 library(DT)
 library(reshape2)
+library(tidyverse)
 
 # ---- Load Data ----
 sdg_data <- read_csv("sdg_data.csv")   # combined Goal 7 & 9 dataset
