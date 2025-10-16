@@ -1,5 +1,3 @@
-# sdg_intro_stats
-
 # Interactive SDG Data Explorer
 
 Welcome to the **Interactive SDG Data Explorer**, a Shiny web application designed for educational purposes in an **Introduction to Statistics** course. This app allows students to explore, visualize, and analyze data related to the **United Nations Sustainable Development Goals (SDGs)**, specifically **Goal 7: Affordable and Clean Energy** and **Goal 9: Industry, Innovation, and Infrastructure**.
