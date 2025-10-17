@@ -1,4 +1,4 @@
-# app.R — Full version with controls on the right side (no tabsetPanel error)
+# app.R — Tabs on the right, Inputs on the left
 
 library(shiny)
 library(readr)
@@ -36,11 +36,6 @@ ui <- fluidPage(
     # ==== TREND TAB ====
     tabPanel("Trend Over Time",
              fluidRow(
-               column(9,
-                      h4("📈 Indicator Trend Over Time"),
-                      plotlyOutput("trendplot", height = "450px"),
-                      conditionalPanel("input.show_trend_tbl", DTOutput("tbl_trend"))
-               ),
                column(3,
                       wellPanel(
                         selectInput("trend_ind", "Indicator",
@@ -53,6 +48,11 @@ ui <- fluidPage(
                                        multiple = TRUE),
                         checkboxInput("show_trend_tbl", "Show data table", FALSE)
                       )
+               ),
+               column(9,
+                      h4("📈 Indicator Trend Over Time"),
+                      plotlyOutput("trendplot", height = "450px"),
+                      conditionalPanel("input.show_trend_tbl", DTOutput("tbl_trend"))
                )
              )
     ),
@@ -60,11 +60,6 @@ ui <- fluidPage(
     # ==== BOXPLOT TAB ====
     tabPanel("Boxplot by Year",
              fluidRow(
-               column(9,
-                      h4("📊 Indicator Distribution by Year"),
-                      plotlyOutput("boxplot", height = "450px"),
-                      DTOutput("box_table")
-               ),
                column(3,
                       wellPanel(
                         selectInput("box_ind", "Indicator (for Boxplot)",
@@ -73,6 +68,11 @@ ui <- fluidPage(
                                        choices = sort(unique(na.omit(sdg7$Region))),
                                        multiple = TRUE)
                       )
+               ),
+               column(9,
+                      h4("📊 Indicator Distribution by Year"),
+                      plotlyOutput("boxplot", height = "450px"),
+                      DTOutput("box_table")
                )
              )
     ),
@@ -80,12 +80,6 @@ ui <- fluidPage(
     # ==== REGRESSION TAB ====
     tabPanel("Regression Analysis",
              fluidRow(
-               column(9,
-                      h4("📉 Regression Analysis Between Indicators"),
-                      htmlOutput("reg_equation"),
-                      plotlyOutput("reg_plot", height = "450px"),
-                      conditionalPanel("input.show_reg_tbl", DTOutput("reg_table"))
-               ),
                column(3,
                       wellPanel(
                         selectInput("x_var", "X Variable",
@@ -101,6 +95,12 @@ ui <- fluidPage(
                                        multiple = TRUE),
                         checkboxInput("show_reg_tbl", "Show data table", FALSE)
                       )
+               ),
+               column(9,
+                      h4("📉 Regression Analysis Between Indicators"),
+                      htmlOutput("reg_equation"),
+                      plotlyOutput("reg_plot", height = "450px"),
+                      conditionalPanel("input.show_reg_tbl", DTOutput("reg_table"))
                )
              )
     ),
@@ -108,14 +108,14 @@ ui <- fluidPage(
     # ==== RAW DATA TAB ====
     tabPanel("Raw Data",
              fluidRow(
-               column(9,
-                      h4("🗃️ Full Dataset"),
-                      DTOutput("raw_table")
-               ),
                column(3,
                       wellPanel(
                         downloadButton("download_filtered", "Download dataset")
                       )
+               ),
+               column(9,
+                      h4("🗃️ Full Dataset"),
+                      DTOutput("raw_table")
                )
              )
     )
@@ -132,6 +132,7 @@ server <- function(input, output, session) {
                   "Please select at least one country or region."))
     
     dat <- tibble()
+    
     if (length(input$countries) > 0) {
       dat <- sdg7 %>%
         filter(Country %in% input$countries) %>%
@@ -217,6 +218,7 @@ server <- function(input, output, session) {
                   "Please select at least one country or region."))
     
     dat <- tibble()
+    
     if (length(input$reg_countries) > 0) {
       dat <- sdg7 %>%
         filter(Country %in% input$reg_countries) %>%
